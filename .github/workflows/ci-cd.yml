@@ -1,0 +1,117 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop, feature/* ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: fiapx_videos_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Setup database
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fiapx_videos_test
+        run: |
+          yarn db:generate
+          yarn db:migrate
+
+      - name: Run linter
+        run: yarn lint
+
+      - name: Run tests
+        run: yarn test:cov
+
+      - name: Check coverage gate (90%)
+        run: |
+          coverage=$(cat coverage/coverage-final.json | grep -o '"lines":[0-9]*' | head -1 | grep -o '[0-9]*')
+          if [ "$coverage" -lt 90 ]; then
+            echo "❌ Coverage is ${coverage}%, need at least 90%"
+            exit 1
+          else
+            echo "✅ Coverage is ${coverage}%"
+          fi
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/coverage-final.json
+
+      - name: Build
+        run: yarn build
+
+      - name: Build Docker images
+        run: |
+          docker build -f apps/api-gateway/Dockerfile -t fiapx-api-gateway:latest .
+          docker build -f apps/video-worker/Dockerfile -t fiapx-video-worker:latest .
+          docker build -f apps/notification-service/Dockerfile -t fiapx-notification-service:latest .
+
+      - name: Run security scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: fiapx-api-gateway:latest
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  deploy:
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Deploy to production
+        run: |
+          echo "🚀 Deploying to production..."
+          # Add your deployment steps here
+          # Example: docker-compose pull && docker-compose up -d
+
+      - name: Health check
+        run: |
+          sleep 10
+          curl -f http://localhost:3001/health || exit 1

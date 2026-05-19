@@ -1,0 +1,4 @@
+matches-ignore: []
+paths-ignore:
+  - test/**
+  - docs/**

@@ -1,0 +1,15 @@
+{
+  "name": "fiapx-video-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Microservices platform for FIAP X video processing",
+  "workspaces": [
+    "services/*"
+  ],
+  "scripts": {
+    "dev:up": "docker compose up -d --build",
+    "dev:down": "docker compose down",
+    "dev:logs": "docker compose logs -f",
+    "health": "curl http://localhost:3001/health"
+  }
+}

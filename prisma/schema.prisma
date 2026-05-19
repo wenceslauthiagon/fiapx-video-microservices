@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  videoJobs VideoJob[]
+
+  @@map("users")
+}
+
+model VideoJob {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  originalFileName  String
+  status    JobStatus @default(PENDING)
+  progress  Int       @default(0)
+  
+  inputPath   String
+  outputPath  String?
+  frameCount  Int?
+  
+  error     String?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  startedAt DateTime?
+  finishedAt DateTime?
+
+  notifications Notification[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("video_jobs")
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  jobId     String
+  job       VideoJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  type      NotificationType
+  message   String
+  sent      Boolean   @default(false)
+  sentAt    DateTime?
+  
+  createdAt DateTime @default(now())
+
+  @@index([jobId])
+  @@index([sent])
+  @@map("notifications")
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum NotificationType {
+  EMAIL
+  WEBHOOK
+  TELEGRAM
+}
