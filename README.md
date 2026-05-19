@@ -1,3 +1,4 @@
+# fiapx-video-microservices
 # FIAP X - Video Processing System
 
 Sistema de processamento de vídeos com arquitetura hexagonal e microsserviços baseado em NestJS.
@@ -249,3 +250,4 @@ MIT
 ## 👥 Autores
 
 FIAP Team - Hackathon 2026
+
