@@ -5,9 +5,6 @@
     "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": "./src",
-    "ignoreDeprecations": "6.0",
-    "baseUrl": "./",
-    "moduleResolution": "node",
     "paths": {
       "@domain/*": ["./src/domain/*"],
       "@application/*": ["./src/application/*"],

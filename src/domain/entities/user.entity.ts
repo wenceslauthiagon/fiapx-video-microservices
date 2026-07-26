@@ -1,3 +1,5 @@
+import { isEmail } from 'class-validator';
+
 export class User {
   id: string;
   email: string;
@@ -16,7 +18,6 @@ export class User {
   }
 
   isValidEmail(): boolean {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(this.email);
+    return isEmail(this.email.trim());
   }
 }

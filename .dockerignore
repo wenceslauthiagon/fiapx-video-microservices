@@ -14,10 +14,6 @@ npm-debug.log
 .idea/
 *.swp
 *.swo
-.eslintrc.js
-.prettierrc
-jest.config.js
-tsconfig.json
 coverage/
 test/
 **/*.spec.ts

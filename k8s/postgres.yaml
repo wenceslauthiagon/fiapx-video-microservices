@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fiapx-postgres-pvc
+  namespace: fiapx
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fiapx-postgres
+  namespace: fiapx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fiapx-postgres
+  template:
+    metadata:
+      labels:
+        app: fiapx-postgres
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: fiapx_videos
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: fiapx-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fiapx-secrets
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+              ephemeral-storage: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1024Mi
+              ephemeral-storage: 1Gi
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: fiapx-postgres-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fiapx-postgres
+  namespace: fiapx
+spec:
+  selector:
+    app: fiapx-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
