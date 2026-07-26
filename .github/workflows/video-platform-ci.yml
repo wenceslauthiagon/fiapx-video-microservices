@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run Trivy filesystem scan
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: video-platform
@@ -50,15 +50,23 @@ jobs:
         with:
           terraform_wrapper: false
 
-      - name: Terraform fmt check (if terraform exists)
+      - name: Terraform inventory
         shell: bash
         run: |
-          tf_dirs=$(find terraform-database terraform-kubernetes -type f -name "*.tf" -exec dirname {} \; 2>/dev/null | sort -u)
-          if [ -z "$tf_dirs" ]; then
-            echo "No terraform files found in terraform-database/terraform-kubernetes"
+          tf_dirs=()
+          for dir in terraform-database terraform-kubernetes; do
+            if [ -d "$dir" ]; then
+              tf_dirs+=("$dir")
+            fi
+          done
+
+          if [ ${#tf_dirs[@]} -eq 0 ]; then
+            echo "No terraform directories found"
             exit 0
           fi
-          terraform fmt -recursive terraform-database terraform-kubernetes || echo "Terraform formatting issues detected; keeping visual check non-blocking"
+
+          echo "Terraform directories found: ${tf_dirs[*]}"
+          find "${tf_dirs[@]}" -type f -name "*.tf" -print || true
 
   test-api-gateway:
     name: api-gateway tests
