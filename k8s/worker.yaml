@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fiapx-worker
+  namespace: fiapx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fiapx-worker
+  template:
+    metadata:
+      labels:
+        app: fiapx-worker
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: worker
+          image: ghcr.io/fiapx/fiapx-api:1.0.0
+          imagePullPolicy: Always
+          command: ["node", "dist/main.worker.js"]
+          env:
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: NODE_ENV
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: REDIS_HOST
+            - name: REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: REDIS_PORT
+            - name: OUTPUT_DIR
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: OUTPUT_DIR
+            - name: SMTP_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: SMTP_HOST
+            - name: SMTP_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: SMTP_PORT
+            - name: SMTP_FROM
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: SMTP_FROM
+            - name: DD_TRACE_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: DD_TRACE_ENABLED
+            - name: DD_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: DD_ENV
+            - name: DD_VERSION
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: DD_VERSION
+            - name: DD_LOGS_INJECTION
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: DD_LOGS_INJECTION
+            - name: VIDEO_WORKER_CONCURRENCY
+              valueFrom:
+                configMapKeyRef:
+                  name: fiapx-config
+                  key: VIDEO_WORKER_CONCURRENCY
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: fiapx-secrets
+                  key: DATABASE_URL
+            - name: DD_SERVICE
+              value: fiapx-worker
+            - name: VIDEO_PROCESSOR_ENABLED
+              value: "true"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+              ephemeral-storage: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1024Mi
+              ephemeral-storage: 1Gi

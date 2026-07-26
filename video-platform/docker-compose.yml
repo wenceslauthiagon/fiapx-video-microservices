@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
@@ -19,16 +17,26 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: fiapx-redis
+  kafka:
+    image: bitnami/kafka:latest
+    container_name: fiapx-kafka
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${KAFKA_PORT:-9092}:9092"
+    environment:
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=true
+      - ALLOW_PLAINTEXT_LISTENER=yes
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1"]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 10s
+      retries: 10
 
   mailhog:
     image: mailhog/mailhog:latest
@@ -45,16 +53,21 @@ services:
     environment:
       PORT: 3001
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-fiapx_videos}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      KAFKA_BROKERS: kafka:9092
+      VIDEO_TOPIC: video.jobs
       JWT_SECRET: ${JWT_SECRET:-change-this-secret}
       JWT_EXPIRATION: ${JWT_EXPIRATION:-7d}
+      UPLOAD_DIR: /data/uploads
+      OUTPUT_DIR: /data/outputs
     ports:
       - "${API_GATEWAY_PORT:-3001}:3001"
+    volumes:
+      - ./data/uploads:/data/uploads
+      - ./data/outputs:/data/outputs
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
+      kafka:
         condition: service_healthy
 
   processing-worker:
@@ -64,12 +77,18 @@ services:
     container_name: fiapx-processing-worker
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-fiapx_videos}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      KAFKA_BROKERS: kafka:9092
+      VIDEO_TOPIC: video.jobs
+      NOTIFICATION_TOPIC: video.notifications
+      OUTPUT_DIR: /data/outputs
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - ./data/outputs:/data/outputs
+      - ./data/uploads:/data/uploads
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
+      kafka:
         condition: service_healthy
 
   notification-service:
@@ -79,15 +98,15 @@ services:
     container_name: fiapx-notification-service
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-fiapx_videos}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      KAFKA_BROKERS: kafka:9092
+      NOTIFICATION_TOPIC: video.notifications
       SMTP_HOST: ${SMTP_HOST:-mailhog}
       SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_FROM: ${SMTP_FROM:-noreply@fiapx.local}
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
+      kafka:
         condition: service_healthy
 
 volumes:

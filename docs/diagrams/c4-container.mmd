@@ -1,0 +1,58 @@
+flowchart TB
+  classDef person fill:#3a2e21,stroke:#ffbf75,color:#fff4e4;
+  classDef container fill:#1e2942,stroke:#90a8ff,color:#edf2ff;
+  classDef datastore fill:#1f2f2d,stroke:#83d5c1,color:#e9fff9;
+  classDef external fill:#2d2435,stroke:#d5a6ff,color:#f9efff;
+
+  U[Person: Usuario]:::person
+  ADM[Person: Operador/DevOps]:::person
+
+  subgraph SYS[System Boundary: FIAPX Video Processor]
+    FE[Container: Frontend React
+    Responsabilidade: autenticacao, upload, monitoracao e download]:::container
+
+    API[Container: API NestJS
+    Responsabilidade: auth JWT, endpoints, persistencia e enqueue]:::container
+
+    WK[Container: Worker NestJS
+    Responsabilidade: consumir fila, transcodificar, notificar]:::container
+
+    DB[(Container: PostgreSQL
+    users, video_jobs, notifications, password_reset_tokens)]:::datastore
+
+    RQ[(Container: Redis/Bull
+    fila video-processing)]:::datastore
+
+    FS[(Container: File Storage
+    uploads e outputs)]:::datastore
+  end
+
+  SMTP[External: SMTP Provider / MailHog]:::external
+  DD[External: Datadog]:::external
+  PROM[External: Prometheus]:::external
+  GRAF[External: Grafana]:::external
+  GHCR[External: GHCR Registry]:::external
+  K8S[External: Kubernetes Cluster]:::external
+
+  U -->|HTTPS| FE
+  FE -->|REST JSON + Bearer JWT| API
+
+  API -->|CRUD entities| DB
+  API -->|publish jobs| RQ
+  API -->|store uploaded file| FS
+
+  WK -->|consume jobs| RQ
+  WK -->|update status/progress| DB
+  WK -->|read input / write output| FS
+  WK -->|send completion email| SMTP
+
+  API -. traces/logs .-> DD
+  WK -. traces/logs .-> DD
+  API -. metrics .-> PROM
+  WK -. metrics .-> PROM
+  PROM --> GRAF
+
+  ADM -->|build/push image| GHCR
+  ADM -->|deploy manifests| K8S
+  K8S -->|run pods api/worker| API
+  K8S -->|run pods api/worker| WK

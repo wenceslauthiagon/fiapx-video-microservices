@@ -4,9 +4,14 @@ import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { VideoModule } from './video/video.module';
 
+const envFilePath =
+  process.env.NODE_ENV === 'development'
+    ? ['.env.development', '.env']
+    : '.env';
+
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
+    ConfigModule.forRoot({ isGlobal: true, envFilePath }),
     AuthModule,
     VideoModule,
   ],

@@ -21,7 +21,12 @@ export class VideoJob {
   startedAt?: Date;
   finishedAt?: Date;
 
-  constructor(id: string, userId: string, originalFileName: string, inputPath: string) {
+  constructor(
+    id: string,
+    userId: string,
+    originalFileName: string,
+    inputPath: string,
+  ) {
     this.id = id;
     this.userId = userId;
     this.originalFileName = originalFileName;
