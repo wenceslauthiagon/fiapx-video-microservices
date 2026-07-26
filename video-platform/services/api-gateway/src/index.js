@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { v4: uuidv4 } = require('uuid');
 const { Pool } = require('pg');
@@ -56,7 +57,18 @@ const ALLOWED_VIDEO_MIME_TYPES = new Set([
 ]);
 
 const uploadBaseDir = process.env.UPLOAD_DIR || '/data/uploads';
-fs.mkdirSync(uploadBaseDir, { recursive: true });
+const fallbackUploadBaseDir = path.join(os.tmpdir(), 'fiapx-uploads');
+
+function ensureWritableDir(baseDir, fallbackDir) {
+  try {
+    fs.mkdirSync(baseDir, { recursive: true });
+    return baseDir;
+  } catch (err) {
+    if (!fallbackDir) throw err;
+    fs.mkdirSync(fallbackDir, { recursive: true });
+    return fallbackDir;
+  }
+}
 
 const MAX_FILE_SIZE_MB = Number.parseInt(process.env.MAX_FILE_SIZE_MB || '500', 10);
 function createUploadMiddleware(currentUploadDir, currentMaxFileSizeMb) {
@@ -99,6 +111,8 @@ function createApp({ pool, producer, jwtSecret = JWT_SECRET, videoTopic = VIDEO_
   app.disable('x-powered-by');
   app.use(express.json());
 
+  const writableUploadDir = ensureWritableDir(currentUploadDir, fallbackUploadBaseDir);
+
   app.use((req, res, next) => {
     const start = process.hrtime.bigint();
     const requestId = req.headers['x-request-id'] || uuidv4();
@@ -126,7 +140,7 @@ function createApp({ pool, producer, jwtSecret = JWT_SECRET, videoTopic = VIDEO_
     next();
   });
 
-  const upload = createUploadMiddleware(currentUploadDir, currentMaxFileSizeMb);
+  const upload = createUploadMiddleware(writableUploadDir, currentMaxFileSizeMb);
 
   function authMiddleware(req, res, next) {
     const token = extractBearerToken(req.headers.authorization);

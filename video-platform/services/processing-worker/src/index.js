@@ -1,4 +1,5 @@
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { execSync } = require('node:child_process');
 const { Kafka } = require('kafkajs');
@@ -12,6 +13,18 @@ const VIDEO_TOPIC = process.env.VIDEO_TOPIC || 'video.jobs';
 const NOTIFICATION_TOPIC = process.env.NOTIFICATION_TOPIC || 'video.notifications';
 
 const outputBaseDir = process.env.OUTPUT_DIR || '/data/outputs';
+const fallbackOutputBaseDir = path.join(os.tmpdir(), 'fiapx-outputs');
+
+function ensureWritableDir(baseDir, fallbackDir) {
+  try {
+    fs.mkdirSync(baseDir, { recursive: true });
+    return baseDir;
+  } catch (err) {
+    if (!fallbackDir) throw err;
+    fs.mkdirSync(fallbackDir, { recursive: true });
+    return fallbackDir;
+  }
+}
 
 async function retryAsync(fn, attempts = 3, initialDelayMs = 300) {
   let lastError;
@@ -141,16 +154,15 @@ async function processMessage(message, { pool, producer, currentOutputBaseDir, n
 }
 
 function createService({ pool, producer, consumer, currentOutputBaseDir = outputBaseDir, videoTopic = VIDEO_TOPIC, notificationTopic = NOTIFICATION_TOPIC }) {
-  fs.mkdirSync(currentOutputBaseDir, { recursive: true });
-
   async function start() {
+    const writableOutputBaseDir = ensureWritableDir(currentOutputBaseDir, fallbackOutputBaseDir);
     await producer.connect();
     await consumer.connect();
     await consumer.subscribe({ topic: videoTopic, fromBeginning: false });
 
     await consumer.run({
       eachMessage: async ({ message }) => {
-        await processMessage(message, { pool, producer, currentOutputBaseDir, notificationTopic });
+        await processMessage(message, { pool, producer, currentOutputBaseDir: writableOutputBaseDir, notificationTopic });
       },
     });
 
