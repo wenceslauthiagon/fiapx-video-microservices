@@ -25,7 +25,12 @@ export class PrismaVideoJobRepository implements IVideoJobRepository {
   }
 
   async findByUserId(userId: string, skip = 0, take = 10): Promise<VideoJob[]> {
-    const rows = await this.prisma.videoJob.findMany({ where: { userId }, skip, take, orderBy: { createdAt: 'desc' } });
+    const rows = await this.prisma.videoJob.findMany({
+      where: { userId },
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
+    });
     return rows.map((row) => this.toDomain(row));
   }
 
@@ -45,12 +50,21 @@ export class PrismaVideoJobRepository implements IVideoJobRepository {
     return this.toDomain(updated);
   }
 
+  async delete(id: string): Promise<void> {
+    await this.prisma.videoJob.delete({ where: { id } });
+  }
+
   async countByUserId(userId: string): Promise<number> {
     return this.prisma.videoJob.count({ where: { userId } });
   }
 
   private toDomain(raw: any): VideoJob {
-    const job = new VideoJob(raw.id, raw.userId, raw.originalFileName, raw.inputPath);
+    const job = new VideoJob(
+      raw.id,
+      raw.userId,
+      raw.originalFileName,
+      raw.inputPath,
+    );
     job.status = raw.status;
     job.progress = raw.progress;
     job.outputPath = raw.outputPath ?? undefined;

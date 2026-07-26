@@ -1,0 +1,77 @@
+flowchart LR
+  classDef app fill:#1b2740,stroke:#8ea2ff,color:#eaf0ff;
+  classDef infra fill:#242133,stroke:#b09dff,color:#f2efff;
+  classDef data fill:#1f2a2e,stroke:#8fd3c7,color:#e8fffb;
+  classDef ext fill:#2e241c,stroke:#ffc27a,color:#fff4e6;
+  classDef obs fill:#2a2233,stroke:#d6a8ff,color:#f7eeff;
+
+  U[Usuario]:::ext --> FE[Frontend React + Vite]:::app
+
+  subgraph API_RUNTIME[API Runtime - src/main.ts]
+    API[API NestJS]:::app
+    AUTH[Auth Module JWT]:::app
+    VIDEO[Video Module]:::app
+    RESET[Forgot/Reset Password]:::app
+    DOCS[Swagger + Health]:::app
+  end
+
+  FE -->|POST /auth/login/register| AUTH
+  FE -->|POST /auth/forgot-password| RESET
+  FE -->|POST /videos/upload| VIDEO
+  FE -->|GET /videos/jobs| VIDEO
+  FE -->|GET /videos/watch/:jobId| VIDEO
+  FE -->|GET /videos/download/:jobId| VIDEO
+  FE -->|DELETE /videos/jobs/:jobId| VIDEO
+
+  subgraph DATA_LAYER[Data Layer]
+    PG[(PostgreSQL + Prisma)]:::data
+    USERS[(users)]:::data
+    JOBS[(video_jobs)]:::data
+    TOKENS[(password_reset_tokens)]:::data
+    NOTIF[(notifications)]:::data
+  end
+
+  AUTH --> PG
+  RESET --> TOKENS
+  RESET --> USERS
+  VIDEO --> JOBS
+  VIDEO --> PG
+  PG --- USERS
+  PG --- JOBS
+  PG --- TOKENS
+  PG --- NOTIF
+
+  subgraph ASYNC_LAYER[Async Processing]
+    REDIS[(Redis)]:::infra
+    BULL[Queue video-processing / Bull]:::infra
+    WORKER[Dedicated Worker - src/main.worker.ts]:::app
+    FFMPEG[FFmpeg Processor]:::ext
+    STORE[uploads/outputs filesystem]:::data
+  end
+
+  VIDEO -->|enqueue job| BULL
+  BULL --> REDIS
+  REDIS --> WORKER
+  WORKER -->|update status/progress| JOBS
+  WORKER --> STORE
+  WORKER --> FFMPEG
+  FFMPEG --> STORE
+
+  subgraph NOTIFICATIONS[Notification]
+    SMTP[SMTP Provider / MailHog]:::ext
+  end
+
+  WORKER -->|email done/fail| SMTP
+  WORKER -->|persist notification| NOTIF
+
+  subgraph OBSERVABILITY[Observability]
+    DD[Datadog traces + structured logs]:::obs
+    PROM[Prometheus]:::obs
+    GRAF[Grafana]:::obs
+  end
+
+  API -. logs/traces .-> DD
+  WORKER -. logs/traces .-> DD
+  API -. metrics .-> PROM
+  WORKER -. metrics .-> PROM
+  PROM --> GRAF

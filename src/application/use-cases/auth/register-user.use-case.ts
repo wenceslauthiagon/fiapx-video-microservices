@@ -4,7 +4,12 @@ import { IUserRepository } from '../../../domain/repositories';
 export class RegisterUserUseCase {
   constructor(private readonly userRepository: IUserRepository) {}
 
-  async execute(email: string, password: string, name: string, hashPassword: (pwd: string) => Promise<string>): Promise<User> {
+  async execute(
+    email: string,
+    password: string,
+    name: string,
+    hashPassword: (pwd: string) => Promise<string>,
+  ): Promise<User> {
     const exists = await this.userRepository.findByEmail(email);
     if (exists) {
       throw new Error('Email already registered');

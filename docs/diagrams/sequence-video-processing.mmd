@@ -1,0 +1,54 @@
+sequenceDiagram
+  participant U as User
+  participant FE as Frontend Dashboard
+  participant API as API Video Controller/Service
+  participant FS as File Storage uploads/outputs
+  participant DB as PostgreSQL
+  participant Q as Redis/Bull Queue
+  participant WK as Worker
+  participant FF as FFmpeg
+  participant SMTP as SMTP
+
+  U->>FE: select video and click upload
+  FE->>API: POST /videos/upload (multipart/form-data)
+  API->>FS: save input file in uploads/
+  API->>DB: create video_job(status=PENDING,progress=0)
+  API->>Q: enqueue job id
+  API-->>FE: 201 {id,status,fileName}
+
+  loop polling every 5s
+    FE->>API: GET /videos/jobs?page=1&limit=20
+    API->>DB: fetch user jobs
+    API-->>FE: jobs list
+  end
+
+  Q->>WK: deliver job
+  WK->>DB: set status=PROCESSING, startedAt
+  WK->>FS: read input file
+  WK->>FF: transcode to mp4
+
+  alt processing success
+    FF-->>WK: output file path + metadata
+    WK->>FS: write output in outputs/
+    WK->>DB: set status=COMPLETED, progress=100, outputPath
+    WK->>SMTP: send success notification
+  else processing failure
+    FF-->>WK: error
+    WK->>DB: set status=FAILED, error message
+    WK->>SMTP: send failure notification
+  end
+
+  alt user watches/downloads
+    FE->>API: GET /videos/watch/:jobId or /videos/download/:jobId
+    API->>DB: validate ownership and status COMPLETED
+    API->>FS: read output file
+    API-->>FE: stream/download video
+  end
+
+  alt user deletes job
+    FE->>API: DELETE /videos/jobs/:jobId
+    API->>DB: validate ownership
+    API->>FS: delete input/output files when present
+    API->>DB: delete video_job
+    API-->>FE: 200 deleted
+  end

@@ -10,7 +10,12 @@ export interface IUserRepository {
 export interface IVideoJobRepository {
   create(job: VideoJob): Promise<VideoJob>;
   findById(id: string): Promise<VideoJob | null>;
-  findByUserId(userId: string, skip?: number, take?: number): Promise<VideoJob[]>;
+  findByUserId(
+    userId: string,
+    skip?: number,
+    take?: number,
+  ): Promise<VideoJob[]>;
   update(job: VideoJob): Promise<VideoJob>;
+  delete(id: string): Promise<void>;
   countByUserId(userId: string): Promise<number>;
 }

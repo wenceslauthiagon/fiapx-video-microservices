@@ -1,0 +1,146 @@
+name: Video Platform CI
+
+on:
+  push:
+    branches: [main, develop, feature/*]
+    paths:
+      - 'video-platform/**'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'video-platform/**'
+
+jobs:
+  project-build:
+    name: project build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build services images
+        working-directory: video-platform
+        run: docker compose build
+
+  security-scan:
+    name: security scan
+    runs-on: ubuntu-latest
+    needs: project-build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: video-platform
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '0'
+
+  terraform-structure:
+    name: terraform structure check
+    runs-on: ubuntu-latest
+    needs: project-build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform inventory
+        shell: bash
+        run: |
+          tf_dirs=()
+          for dir in terraform-database terraform-kubernetes; do
+            if [ -d "$dir" ]; then
+              tf_dirs+=("$dir")
+            fi
+          done
+
+          if [ ${#tf_dirs[@]} -eq 0 ]; then
+            echo "No terraform directories found"
+            exit 0
+          fi
+
+          echo "Terraform directories found: ${tf_dirs[*]}"
+          find "${tf_dirs[@]}" -type f -name "*.tf" -print || true
+
+  test-api-gateway:
+    name: api-gateway tests
+    runs-on: ubuntu-latest
+    needs: terraform-structure
+    defaults:
+      run:
+        working-directory: video-platform/services/api-gateway
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test -- --forceExit --passWithNoTests
+
+  test-processing-worker:
+    name: processing-worker tests
+    runs-on: ubuntu-latest
+    needs: terraform-structure
+    defaults:
+      run:
+        working-directory: video-platform/services/processing-worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test -- --forceExit --passWithNoTests
+
+  test-notification-service:
+    name: notification-service tests
+    runs-on: ubuntu-latest
+    needs: terraform-structure
+    defaults:
+      run:
+        working-directory: video-platform/services/notification-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test -- --forceExit --passWithNoTests
+
+  compose-readiness:
+    name: compose readiness check
+    runs-on: ubuntu-latest
+    needs:
+      - test-api-gateway
+      - test-processing-worker
+      - test-notification-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate compose file
+        working-directory: video-platform
+        run: docker compose config > /tmp/video-platform-compose.out

@@ -1,311 +1,165 @@
-# Guia de Execução - FIAP X Video Processor
+# Quickstart
 
-## ⚡ Quick Start (3 minutos)
+## Pre-requisitos
 
-### Pré-requisitos
-- Docker & Docker Compose instalados
-- Git
-- Node.js 18+ (opcional, para dev local)
+- Docker e Docker Compose
+- Node.js 22 para execucao fora de container
+- npm
 
-### Passo 1: Clonar o repositório
+## Subida em 3 minutos
+
 ```bash
-git clone <seu-repo> projeto-fiapx
-cd projeto-fiapx
+docker compose up -d postgres redis mailhog prometheus grafana
+docker compose up -d --build api worker frontend
 ```
 
-### Passo 2: Configurar ambiente
-```bash
-cp .env.example .env
-# Editar .env se necessário (senhas, portas, etc)
+Frontend:
+
+```text
+http://localhost:4173
 ```
 
-### Passo 3: Subir toda a infraestrutura
+## Validacao rapida
+
 ```bash
-docker-compose up -d
-```
-
-**O que sobe:**
-- PostgreSQL (porta 5432)
-- Redis (porta 6379)
-- MailHog (portas 1025 SMTP, 8025 Web UI)
-- API Gateway (porta 3001)
-- Video Worker (background)
-- Notification Service (background)
-- Prometheus (porta 9090)
-- Grafana (porta 3000)
-
-### Passo 4: Verificar se está tudo rodando
-```bash
-docker-compose ps
-
-# Ou testar o health check
 curl http://localhost:3001/health
 ```
 
-## 🧪 Testar a API
+Resposta esperada:
 
-### 1. Registrar novo usuário
+```json
+{
+  "status": "ok",
+  "service": "fiapx-api"
+}
+```
+
+Swagger:
+
+```text
+http://localhost:3001/api-doc
+```
+
+## Fluxo de teste manual
+
+### 1. Registrar usuario
+
 ```bash
 curl -X POST http://localhost:3001/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "email": "user@example.com",
-    "password": "secure123",
+    "password": "123456",
+    "confirmPassword": "123456",
     "name": "John Doe"
   }'
 ```
 
-**Resposta:**
-```json
-{
-  "access_token": "eyJhbGc...",
-  "user": {
-    "id": "usr_...",
-    "email": "user@example.com",
-    "name": "John Doe"
-  }
-}
-```
+### 2. Login
 
-**Salvar o token!**
 ```bash
-TOKEN="eyJhbGc..."  # Cole seu token aqui
+curl -X POST http://localhost:3001/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "123456"
+  }'
 ```
 
-### 2. Fazer upload de um vídeo
+Guarde o valor de access_token em TOKEN.
+
+### 3. Upload
+
 ```bash
 curl -X POST http://localhost:3001/videos/upload \
   -H "Authorization: Bearer $TOKEN" \
-  -F "file=@/caminho/para/seu/video.mp4"
+  -F "file=@./sample.mp4"
 ```
 
-**Resposta:**
-```json
-{
-  "id": "job_...",
-  "status": "PENDING",
-  "fileName": "video.mp4",
-  "createdAt": "2026-05-19T..."
-}
-```
+### 4. Consultar jobs
 
-**Salvar o jobId!**
-```bash
-JOB_ID="job_..."
-```
-
-### 3. Listar vídeos em processamento
 ```bash
 curl -X GET "http://localhost:3001/videos/jobs?page=1&limit=10" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-**Resposta (em tempo real):**
-```json
-{
-  "jobs": [
-    {
-      "id": "job_...",
-      "fileName": "video.mp4",
-      "status": "PROCESSING",  // Vai para COMPLETED em ~10-30s
-      "progress": 50,
-      "frameCount": null,
-      "createdAt": "2026-05-19T...",
-      "finishedAt": null
-    }
-  ],
-  "total": 1,
-  "page": 1,
-  "limit": 10
-}
-```
+### 5. Download
 
-### 4. Aguardar conclusão (polling)
 ```bash
-# Até o status ficar COMPLETED
-while true; do
-  curl -X GET "http://localhost:3001/videos/jobs" \
-    -H "Authorization: Bearer $TOKEN" | jq '.jobs[0].status'
-  sleep 2
-done
-```
-
-### 5. Fazer download do ZIP
-```bash
-curl -X GET "http://localhost:3001/videos/download/$JOB_ID" \
+curl -X GET http://localhost:3001/videos/download/<JOB_ID> \
   -H "Authorization: Bearer $TOKEN" \
-  -o frames.zip
-
-unzip frames.zip
-ls -la  # Ver os frames extraídos
+  -o processed-frames.zip
 ```
 
-### 6. Verificar email enviado
-- Abra http://localhost:8025
-- Você verá o email de confirmação/sucesso
+### 6. Verificar email
 
-## 📊 Monitoramento
+Abra:
 
-### Grafana (Dashboards)
-- URL: http://localhost:3000
-- User: admin
-- Password: admin
-- Métricas: CPU, Memory, Queue size, Latency
+```text
+http://localhost:8025
+```
 
-### Prometheus (Scraper)
-- URL: http://localhost:9090
-- Query exemplos:
-  - `rate(http_requests_total[5m])` - Taxa de requests
-  - `histogram_quantile(0.95, http_duration_seconds)` - P95 latency
-
-### MailHog (Email Testing)
-- URL: http://localhost:8025
-- Ver todos os emails enviados
-- Debug de templates
-
-## 🔍 Logs
+## Logs uteis
 
 ```bash
-# Ver logs de um serviço específico
-docker-compose logs -f api-gateway
-docker-compose logs -f video-worker
-docker-compose logs -f notification-service
-
-# Ver apenas as últimas 50 linhas
-docker-compose logs --tail=50 api-gateway
+docker compose logs -f api
+docker compose logs -f worker
+docker compose logs -f frontend
 ```
 
-## 🛑 Parar tudo
+## Testes de validacao (banca)
 
 ```bash
-docker-compose down
+npm install
+npm run db:generate
+npm run test
+npm run test:e2e
 ```
 
-## 🗑️ Limpar (remover dados persistentes)
+Smoke test rapido:
 
 ```bash
-docker-compose down -v
-# Remove volumes (banco de dados, redis, etc)
+npm run smoke:test
 ```
 
-## 🐛 Troubleshooting
+Smoke test com upload:
 
-### API não responde
-```bash
-# Verificar se está rodando
-docker-compose ps api-gateway
-
-# Ver logs
-docker-compose logs api-gateway
-
-# Reiniciar
-docker-compose restart api-gateway
-```
-
-### Video não processa
-```bash
-# Verificar worker
-docker-compose logs video-worker
-
-# Checar se ffmpeg está instalado
-docker-compose exec video-worker which ffmpeg
-
-# Testar ffmpeg
-docker-compose exec video-worker ffmpeg -version
-```
-
-### Banco de dados inacessível
-```bash
-# Verificar PostgreSQL
-docker-compose logs postgres
-
-# Reconectar
-docker-compose restart postgres
-
-# Limpar e reiniciar fresh
-docker-compose down -v
-docker-compose up -d
-yarn db:migrate
-```
-
-### Redis não conecta
-```bash
-# Verificar Redis
-docker-compose logs redis
-
-# Testar conexão
-docker-compose exec redis redis-cli ping
-# Resposta esperada: PONG
-```
-
-## 📝 Desenvolvimento Local (sem Docker)
-
-Se preferir rodar local (requer PostgreSQL + Redis instalados):
+Linux/macOS:
 
 ```bash
-# Terminal 1 - API Gateway
-yarn workspace @fiapx/api-gateway start:dev
-
-# Terminal 2 - Video Worker
-yarn workspace @fiapx/video-worker start:dev
-
-# Terminal 3 - Notification Service
-yarn workspace @fiapx/notification-service start:dev
+SMOKE_VIDEO_FILE=./sample.mp4 npm run smoke:test
 ```
 
-Configurar .env para apontar para localhost:
-```
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/fiapx_videos
-REDIS_HOST=localhost
-REDIS_PORT=6379
+Windows PowerShell:
+
+```powershell
+$env:SMOKE_VIDEO_FILE="./sample.mp4"; npm run smoke:test
 ```
 
-## 🧪 Rodar Testes
+## Limpeza
 
 ```bash
-# Todos os testes
-yarn test
-
-# Com cobertura
-yarn test:cov
-
-# Watch mode
-yarn test:watch
-
-# Apenas um app
-yarn workspace @fiapx/api-gateway test:cov
+docker compose down
+docker compose down -v
 ```
 
-## 📦 Build para Produção
+## Execucao sem Docker
 
 ```bash
-# Build de todos os apps
-yarn build
-
-# Gerar Prisma Client
-yarn db:generate
-
-# Build das imagens Docker
-docker build -f apps/api-gateway/Dockerfile -t fiapx-api-gateway:prod .
-docker build -f apps/video-worker/Dockerfile -t fiapx-video-worker:prod .
-docker build -f apps/notification-service/Dockerfile -t fiapx-notification-service:prod .
+npm install
+npm run db:generate
+npm run db:push
+npm run start:api
+npm run start:worker
 ```
 
-## 🚀 Deploy em Kubernetes
+## Troubleshooting rapido
 
-```bash
-# Aplicar manifests
-kubectl apply -f k8s/
+1. `docker compose` falha com `dockerDesktopLinuxEngine`:
+Inicie o Docker Desktop e tente novamente.
 
-# Verificar pods
-kubectl get pods -n fiapx
+2. `npm run test:e2e` falha com erro de banco:
+Verifique se o PostgreSQL esta ativo na porta esperada do `.env.test` (padrao `localhost:5436`).
 
-# Ver logs
-kubectl logs -f pod/video-worker-xxx -n fiapx
-```
-
-## 📞 Dúvidas?
-
-- Checar [README.md](README.md) para visão geral
-- Checar [ARCHITECTURE.md](ARCHITECTURE.md) para detalhes técnicos
-- Ver logs do Docker: `docker-compose logs -f`
+3. Porta ocupada:
+Altere portas de bind no `docker-compose.yml` ou finalize processo usando a porta.
