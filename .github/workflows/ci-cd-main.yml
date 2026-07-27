@@ -231,7 +231,21 @@ jobs:
           mkdir -p $HOME/.kube
           echo "${{ secrets.KUBE_CONFIG_BASE64 }}" | base64 --decode > $HOME/.kube/config
 
+      - name: Check cluster reachability
+        id: cluster-check
+        shell: bash
+        run: |
+          if kubectl cluster-info >/tmp/cluster-info.log 2>&1; then
+            echo "reachable=true" >> "$GITHUB_OUTPUT"
+            echo "Cluster is reachable from runner"
+          else
+            echo "reachable=false" >> "$GITHUB_OUTPUT"
+            echo "Cluster is not reachable from runner, skipping deploy steps"
+            cat /tmp/cluster-info.log
+          fi
+
       - name: Deploy manifests
+        if: steps.cluster-check.outputs.reachable == 'true'
         run: |
           kubectl apply -f k8s/
           kubectl -n $K8S_NAMESPACE set image deployment/fiapx-api api=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
@@ -240,4 +254,9 @@ jobs:
           kubectl -n $K8S_NAMESPACE rollout status deployment/fiapx-worker --timeout=180s
 
       - name: Health check
+        if: steps.cluster-check.outputs.reachable == 'true'
         run: kubectl -n $K8S_NAMESPACE get pods
+
+      - name: Skip deploy (cluster unreachable)
+        if: steps.cluster-check.outputs.reachable != 'true'
+        run: echo "Deploy skipped because cluster endpoint from kubeconfig is unreachable from GitHub runner"
